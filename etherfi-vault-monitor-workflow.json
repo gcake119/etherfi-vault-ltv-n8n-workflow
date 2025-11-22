@@ -1,0 +1,411 @@
+{
+  "name": "Ether.fi Vault LTV Safety Monitor and Alert System",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "39180096-9c78-4578-acd5-f67e812bbc07",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1248,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "vaultAddress",
+              "value": "<__PLACEHOLDER_VALUE__Your Ether.fi Vault Address (e.g., 0xYourVaultAddressHere)__>",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "borrowedAmount",
+              "value": 2600,
+              "type": "number"
+            },
+            {
+              "id": "id-3",
+              "name": "warningThreshold",
+              "value": 0.05,
+              "type": "number"
+            },
+            {
+              "id": "id-4",
+              "name": "safeLTV_USDC",
+              "value": 0.8,
+              "type": "number"
+            },
+            {
+              "id": "id-5",
+              "name": "safeLTV_LiquidUSD",
+              "value": 0.7,
+              "type": "number"
+            },
+            {
+              "id": "id-6",
+              "name": "safeLTV_ETH",
+              "value": 0.5,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "66db066a-ecde-47dc-aaf1-c09a068f01fe",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1024,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "url": "<__PLACEHOLDER_VALUE__Blockchain API endpoint to query vault assets (e.g., Etherscan API or Alchemy API)__>",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "address",
+              "value": "={{ $('Workflow Configuration').first().json.vaultAddress }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ef13e258-8f83-414f-9b3d-6d7cafb731a0",
+      "name": "Query Vault Assets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -800,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the blockchain API response and extract asset balances\nconst response = $input.all();\n\n// Initialize asset balances\nlet ethBalance = 0;\nlet usdcBalance = 0;\nlet liquidUSDBalance = 0;\n\n// Parse the response from the Query Vault Assets node\nif (response && response.length > 0) {\n  const data = response[0].json;\n  \n  // Check if data has assets array or similar structure\n  if (data.assets && Array.isArray(data.assets)) {\n    // Parse assets array\n    data.assets.forEach(asset => {\n      const symbol = asset.symbol || asset.name || '';\n      const balance = parseFloat(asset.balance || asset.amount || 0);\n      \n      if (symbol.toUpperCase().includes('ETH') || symbol.toUpperCase() === 'WETH') {\n        ethBalance += balance;\n      } else if (symbol.toUpperCase().includes('USDC')) {\n        usdcBalance += balance;\n      } else if (symbol.toUpperCase().includes('LIQUIDUSD') || symbol.toUpperCase().includes('LIQUID_USD')) {\n        liquidUSDBalance += balance;\n      }\n    });\n  } else if (data.result && Array.isArray(data.result)) {\n    // Alternative structure with result array\n    data.result.forEach(asset => {\n      const symbol = asset.symbol || asset.tokenSymbol || '';\n      const balance = parseFloat(asset.balance || asset.value || 0);\n      \n      if (symbol.toUpperCase().includes('ETH') || symbol.toUpperCase() === 'WETH') {\n        ethBalance += balance;\n      } else if (symbol.toUpperCase().includes('USDC')) {\n        usdcBalance += balance;\n      } else if (symbol.toUpperCase().includes('LIQUIDUSD') || symbol.toUpperCase().includes('LIQUID_USD')) {\n        liquidUSDBalance += balance;\n      }\n    });\n  } else {\n    // Try to extract from direct properties\n    ethBalance = parseFloat(data.eth || data.ETH || data.weth || data.WETH || 0);\n    usdcBalance = parseFloat(data.usdc || data.USDC || 0);\n    liquidUSDBalance = parseFloat(data.liquidUSD || data.LiquidUSD || data.liquid_usd || 0);\n  }\n}\n\n// Return the parsed asset balances\nreturn [\n  {\n    json: {\n      assets: {\n        ETH: ethBalance,\n        USDC: usdcBalance,\n        LiquidUSD: liquidUSDBalance\n      },\n      totalAssets: ethBalance + usdcBalance + liquidUSDBalance,\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "23baae98-1505-4601-b6cc-9f3c210f6d4f",
+      "name": "Parse Vault Assets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+        "options": {}
+      },
+      "id": "c95bf4c4-3b02-432d-a9e6-9b9e183568fe",
+      "name": "Fetch ETH Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -352,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=usd",
+        "options": {}
+      },
+      "id": "1960a53b-e17c-4a98-8b7f-ef7820386f29",
+      "name": "Fetch USDC Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -352,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "url": "<__PLACEHOLDER_VALUE__API endpoint for LiquidUSD price (e.g., CoinGecko or custom oracle)__>",
+        "options": {}
+      },
+      "id": "fcdb1e7a-adc5-4087-a3b3-6de2e66caaaa",
+      "name": "Fetch LiquidUSD Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -352,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get asset quantities from Parse Vault Assets node\nconst vaultData = $('Parse Vault Assets').first().json;\nconst ethQuantity = vaultData.ethQuantity || 0;\nconst usdcQuantity = vaultData.usdcQuantity || 0;\nconst liquidUsdQuantity = vaultData.liquidUsdQuantity || 0;\nconst borrowedAmount = vaultData.borrowedAmount || 0;\n\n// Get prices from the three price fetch nodes\nconst ethPrice = $('Fetch ETH Price').first().json.price || 0;\nconst usdcPrice = $('Fetch USDC Price').first().json.price || 0;\nconst liquidUsdPrice = $('Fetch LiquidUSD Price').first().json.price || 0;\n\n// Get LTV percentages from Workflow Configuration\nconst config = $('Workflow Configuration').first().json;\nconst ethLTV = config.ethLTV || 0;\nconst usdcLTV = config.usdcLTV || 0;\nconst liquidUsdLTV = config.liquidUsdLTV || 0;\nconst warningThreshold = config.warningThreshold || 0;\n\n// Calculate market value for each asset\nconst ethMarketValue = ethQuantity * ethPrice;\nconst usdcMarketValue = usdcQuantity * usdcPrice;\nconst liquidUsdMarketValue = liquidUsdQuantity * liquidUsdPrice;\n\n// Apply LTV percentages to get weighted values\nconst ethWeightedValue = ethMarketValue * (ethLTV / 100);\nconst usdcWeightedValue = usdcMarketValue * (usdcLTV / 100);\nconst liquidUsdWeightedValue = liquidUsdMarketValue * (liquidUsdLTV / 100);\n\n// Calculate safety line (sum of weighted values)\nconst safetyLine = ethWeightedValue + usdcWeightedValue + liquidUsdWeightedValue;\n\n// Calculate difference and risk metrics\nconst difference = safetyLine - borrowedAmount;\nconst utilizationPercentage = borrowedAmount > 0 ? (borrowedAmount / safetyLine) * 100 : 0;\nconst shouldAlert = difference <= warningThreshold;\n\n// Return comprehensive calculation details\nreturn [\n  {\n    json: {\n      assets: {\n        eth: {\n          quantity: ethQuantity,\n          price: ethPrice,\n          marketValue: ethMarketValue,\n          ltv: ethLTV,\n          weightedValue: ethWeightedValue\n        },\n        usdc: {\n          quantity: usdcQuantity,\n          price: usdcPrice,\n          marketValue: usdcMarketValue,\n          ltv: usdcLTV,\n          weightedValue: usdcWeightedValue\n        },\n        liquidUsd: {\n          quantity: liquidUsdQuantity,\n          price: liquidUsdPrice,\n          marketValue: liquidUsdMarketValue,\n          ltv: liquidUsdLTV,\n          weightedValue: liquidUsdWeightedValue\n        }\n      },\n      safetyLine: safetyLine,\n      borrowedAmount: borrowedAmount,\n      difference: difference,\n      utilizationPercentage: utilizationPercentage,\n      warningThreshold: warningThreshold,\n      shouldAlert: shouldAlert,\n      alertStatus: shouldAlert ? 'WARNING' : 'SAFE'\n    }\n  }\n];"
+      },
+      "id": "1c5754ee-86b3-4cb9-b644-f459c38f4251",
+      "name": "Calculate Safety Line and Risk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $('Calculate Safety Line and Risk').item.json.safetyLine }}",
+              "rightValue": "={{ $('Calculate Safety Line and Risk').item.json.borrowedAmount }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "id": "id-2",
+              "leftValue": "={{ $('Calculate Safety Line and Risk').item.json.safetyLineDifference }}",
+              "rightValue": "={{ $('Calculate Safety Line and Risk').item.json.warningThreshold }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d90fff7c-9e2b-472b-b646-ac1949d5a33d",
+      "name": "Check Alert Condition",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "alertMessage",
+              "value": "=🚨 VAULT SAFETY ALERT 🚨\n\n📍 Vault Address: {{ $('Calculate Safety Line and Risk').item.json.vaultAddress }}\n\n💰 Current Asset Market Values:\n• ETH: ${{ $('Calculate Safety Line and Risk').item.json.ethMarketValue }}\n• USDC: ${{ $('Calculate Safety Line and Risk').item.json.usdcMarketValue }}\n• LiquidUSD: ${{ $('Calculate Safety Line and Risk').item.json.liquidUsdMarketValue }}\n\n⚙️ Safe LTV Settings:\n• ETH: {{ $('Calculate Safety Line and Risk').item.json.ethSafeLtv }}%\n• USDC: {{ $('Calculate Safety Line and Risk').item.json.usdcSafeLtv }}%\n• LiquidUSD: {{ $('Calculate Safety Line and Risk').item.json.liquidUsdSafeLtv }}%\n\n📊 Safety Metrics:\n• Safety Line Amount: ${{ $('Calculate Safety Line and Risk').item.json.safetyLineAmount }}\n• Borrowed Amount: ${{ $('Calculate Safety Line and Risk').item.json.borrowedAmount }}\n• Difference: ${{ $('Calculate Safety Line and Risk').item.json.difference }}\n\n⚠️ RISK WARNING: {{ $('Calculate Safety Line and Risk').item.json.riskWarning }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cfacc76a-660e-42d2-94e5-0fc6e4e2167b",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "<__PLACEHOLDER_VALUE__Your Telegram Chat ID__>",
+        "text": "={{ $json.alertMessage }}",
+        "additionalFields": {}
+      },
+      "id": "c2efff1a-83af-4e1f-b441-fd69ce5f579a",
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        544,
+        176
+      ],
+      "webhookId": "f0c50a50-5dc9-4cb6-9387-6885e35be453"
+    },
+    {
+      "parameters": {
+        "fromEmail": "<__PLACEHOLDER_VALUE__Sender email address__>",
+        "toEmail": "<__PLACEHOLDER_VALUE__Recipient email address__>",
+        "subject": "Ether.fi Vault LTV Alert - Risk Warning",
+        "html": "={{ $json.alertMessage }}",
+        "options": {}
+      },
+      "id": "1b22edc1-8ecb-40ad-b7b9-c929e6d2f21a",
+      "name": "Send Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        544,
+        368
+      ],
+      "webhookId": "198c56cd-cae7-433d-b5d4-17d98ab2e57b"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Query Vault Assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Vault Assets": {
+      "main": [
+        [
+          {
+            "node": "Parse Vault Assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Vault Assets": {
+      "main": [
+        [
+          {
+            "node": "Fetch ETH Price",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch USDC Price",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch LiquidUSD Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch ETH Price": {
+      "main": [
+        [
+          {
+            "node": "Calculate Safety Line and Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch USDC Price": {
+      "main": [
+        [
+          {
+            "node": "Calculate Safety Line and Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch LiquidUSD Price": {
+      "main": [
+        [
+          {
+            "node": "Calculate Safety Line and Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Safety Line and Risk": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Condition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Condition": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "any",
+    "executionTimeout": -1,
+    "availableInMCP": false,
+    "errorWorkflow": "0KTN52me9Uohjsuv"
+  },
+  "versionId": "b872f67e-2b31-471a-a8ac-8d4896e7e2b6",
+  "meta": {
+    "instanceId": "b4bac7f7a101e4aef650ccc9393eff41652b8ea42d2874fdffaafa3ea339fcb7"
+  },
+  "id": "0KTN52me9Uohjsuv",
+  "tags": []
+}
